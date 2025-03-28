@@ -1,0 +1,6 @@
+@apiManicure_HostAddress = http://localhost:5058
+
+GET {{apiManicure_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
