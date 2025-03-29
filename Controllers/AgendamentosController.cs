@@ -21,81 +21,153 @@ namespace apiManicure.Controllers
             _context = context;
         }
 
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<Agendamento>>> GetAgendamentos()
+        [HttpGet("Agendamento")]
+        public async Task<ActionResult<IEnumerable<Agendamento>>> GetAgendamentosPorData([FromQuery] DateTime? data)
         {
-            return await _context.Agendamentos.ToListAsync();
-        }
+            if (data == null)
+                return BadRequest("A data é obrigatória para buscar os agendamentos.");
 
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Agendamento>> GetAgendamento(int id)
-        {
-            var agendamento = await _context.Agendamentos.FindAsync(id);
+            var agendamentos = await _context.Agendamentos
+                .Where(a => a.DataAgendamento.Date == data.Value.Date)
+                .ToListAsync();
 
-            if (agendamento == null)
-            {
-                return NotFound();
-            }
+            if (agendamentos.Count == 0)
+                return NotFound("Nenhum agendamento encontrado para essa data.");
 
-            return agendamento;
+            return Ok(agendamentos);
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutAgendamento(int id, Agendamento agendamento)
+        public async Task<IActionResult> EditarAgendamento(int id, [FromBody] Agendamento agendamentoAtualizado)
         {
-            if (id != agendamento.Id)
-            {
-                return BadRequest();
-            }
 
-            _context.Entry(agendamento).State = EntityState.Modified;
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var agendamento = await _context.Agendamentos.FindAsync(id);
+            if (agendamento == null)
+                return NotFound("Agendamento não encontrado.");
 
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!AgendamentoExists(id))
+                agendamento.ClienteNome = agendamentoAtualizado.ClienteNome;
+                agendamento.DataAgendamento = agendamentoAtualizado.DataAgendamento;
+                agendamento.Servico = agendamentoAtualizado.Servico;
+
+                if (await _context.SaveChangesAsync() > 0)
                 {
-                    return NotFound();
+                    await RegistrarLog("Sucesso", $"Agendamento ID {id} atualizado.");
+                    return Ok("Agendamento atualizado com sucesso.");
                 }
                 else
                 {
-                    throw;
+                    await RegistrarLog("Erro", $"Falha ao atualizar agendamento ID {id}.");
+                    return StatusCode(500, "Erro ao atualizar agendamento.");
                 }
             }
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                await RegistrarLog("Erro", $"Exceção ao atualizar agendamento ID {id}: {ex.Message}");
+                return StatusCode(500, "Erro interno ao atualizar o agendamento.");
+            }
         }
 
-        [HttpPost]
-        public async Task<ActionResult<Agendamento>> PostAgendamento(Agendamento agendamento)
+        [HttpPost("CriarAgendamento")]
+        public async Task<IActionResult> CriarAgendamento([FromBody] Agendamento agendamento)
         {
-            _context.Agendamentos.Add(agendamento);
-            await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetAgendamento", new { id = agendamento.Id }, agendamento);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            if (agendamento == null)
+                return BadRequest("Os dados do agendamento são obrigatórios.");
+
+            try
+            {
+                _context.Agendamentos.Add(agendamento);
+                if (await _context.SaveChangesAsync() > 0)
+                {
+                    var logSucesso = new LogTransacao
+                    {
+                        Tipo = "Sucesso",
+                        Descricao = $"Agendamento criado para {agendamento.ClienteNome} no dia {agendamento.DataAgendamento.Date} as {agendamento.DataAgendamento.TimeOfDay}"
+                    };
+
+                    _context.LogTransacoes.Add(logSucesso);
+                    await _context.SaveChangesAsync();
+
+                    return Ok("Agendamento registrado com sucesso.");
+                }
+                else
+                {
+                    var logErro = new LogTransacao
+                    {
+                        Tipo = "Erro",
+                        Descricao = $"Falha ao criar agendamento para {agendamento.ClienteNome} no dia {agendamento.DataAgendamento}. Motivo desconhecido."
+                    };
+
+                    _context.LogTransacoes.Add(logErro);
+                    await _context.SaveChangesAsync();
+
+                    return StatusCode(500, "Erro ao registrar agendamento.");
+                }
+            }
+            catch (Exception ex)
+            {
+                var logExcecao = new LogTransacao
+                {
+                    Tipo = "Erro",
+                    Descricao = $"Exceção ao criar agendamento para {agendamento.ClienteNome}: {ex.Message}"
+                };
+
+                _context.LogTransacoes.Add(logExcecao);
+                await _context.SaveChangesAsync();
+
+                return StatusCode(500, "Erro interno ao processar o agendamento.");
+            }
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteAgendamento(int id)
+        public async Task<IActionResult> ExcluirAgendamento(int id)
         {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
             var agendamento = await _context.Agendamentos.FindAsync(id);
             if (agendamento == null)
+                return NotFound("Agendamento não encontrado.");
+
+            try
             {
-                return NotFound();
+                _context.Agendamentos.Remove(agendamento);
+
+                if (await _context.SaveChangesAsync() > 0)
+                {
+                    await RegistrarLog("Sucesso", $"Agendamento ID {id} excluído.");
+                    return Ok("Agendamento excluído com sucesso.");
+                }
+                else
+                {
+                    await RegistrarLog("Erro", $"Falha ao excluir agendamento ID {id}.");
+                    return StatusCode(500, "Erro ao excluir agendamento.");
+                }
             }
-
-            _context.Agendamentos.Remove(agendamento);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            catch (Exception ex)
+            {
+                await RegistrarLog("Erro", $"Exceção ao excluir agendamento ID {id}: {ex.Message}");
+                return StatusCode(500, "Erro interno ao excluir o agendamento.");
+            }
         }
 
         private bool AgendamentoExists(int id)
         {
             return _context.Agendamentos.Any(e => e.Id == id);
+        }
+
+        private async Task RegistrarLog(string tipo, string descricao)
+        {
+            _context.LogTransacoes.Add(new LogTransacao { Tipo = tipo, Descricao = descricao });
+            await _context.SaveChangesAsync();
         }
     }
 }

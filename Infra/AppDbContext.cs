@@ -10,6 +10,7 @@ namespace apiManicure.Infra
         public DbSet<HorarioTrabalho> HorariosTrabalho { get; set; }
         public DbSet<HorarioDisponivel> HorariosDisponiveis { get; set; }
         public DbSet<Agendamento> Agendamentos { get; set; }
+        public DbSet<LogTransacao> LogTransacoes { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
