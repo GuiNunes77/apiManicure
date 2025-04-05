@@ -1,0 +1,28 @@
+name: Deploy API no IIS
+
+on:
+  push:
+    branches:
+      - main  # ou 'master', conforme sua branch principal
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Parar o IIS
+        run: iisreset /stop
+
+      - name: Clonar o repositório
+        uses: actions/checkout@v3
+
+      - name: Publicar o projeto
+        run: dotnet publish -c Release -o ./publish
+
+      - name: Copiar arquivos para o IIS
+        run: |
+          Remove-Item -Recurse -Force "C:\inetpub\ApiManicure\*"  # limpa os arquivos antigos
+          Copy-Item -Path "./publish/*" -Destination "C:\inetpub\ApiManicure" -Recurse
+
+      - name: Iniciar o IIS
+        run: iisreset /start
